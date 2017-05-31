@@ -25,6 +25,8 @@
 
 // These constants won't change.  They're used to give names
 #define PIN_LED 13
+#define PIN_BTN 2
+#define PIN_MGT 12
 
 // number of axes, ie: servos
 #define  NB_AXES 2
@@ -38,6 +40,9 @@ uint16_t joy_bases[NB_JOY] = {0, 0};    /**< array for values of joysticks when 
 
 // value of dead zone around resting position
 #define HYSTERISIS 1
+
+/** state of the magnet */
+volatile uint8_t magnet_state = LOW;
 
 /** get sevo movement from joystick axis value
  * @param[in] joy joystick axis raw reading
@@ -89,12 +94,34 @@ uint8_t getAngle (uint8_t angle, int inc) {
 	return ret;
 }
 
+/** interupt routine for joystick switch
+ */
+void ISR_setMagnet (void) {
+	if (digitalRead(PIN_BTN) == HIGH) {
+		magnet_state = ! magnet_state;
+// 		Serial.print(".");
+	}
+}
+
+/** set magnet & led states
+ */
+void setMagnet (void) {
+	digitalWrite (PIN_MGT, magnet_state);
+	digitalWrite (PIN_LED, magnet_state);
+}
+
 void setup (void) {
 	// setup hw
 	pinMode (PIN_LED, OUTPUT);
 	for (uint8_t a=0;a<NB_AXES;a++) {
 		myservo[a].attach(axes_pins[a]);
 	}
+	// button and magnet init
+	pinMode (PIN_BTN, INPUT_PULLUP);
+	pinMode (PIN_MGT, OUTPUT);
+	setMagnet();
+	attachInterrupt (digitalPinToInterrupt(PIN_BTN), ISR_setMagnet, RISING);
+
 
 	// initialize serial communications at 9600 bps:
 	Serial.begin(9600);
@@ -130,6 +157,10 @@ void loop (void) {
 		myservo[j].write(axes_vals[j]);
 		if (inc != 0) { dbgData (j, sensorValue, axes_vals[j], inc); }
 	}
+	setMagnet();
+//  	Serial.print(digitalRead(PIN_BTN));
+// 	Serial.print(" ");
+// 	Serial.println(magnet_state);
 
 	delay(10);
 } // loop
