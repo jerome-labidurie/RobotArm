@@ -14,29 +14,45 @@
  * You should have received a copy of the GNU General Public License
  * along with RobotArm.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Copyright 2017 Jérôme Labidurie <jerome@labidurie.fr>
- *
- * Fablab lannion http://fablab-lannion.org
+ * Copyright 2017 Jérôme Labidurie jerome@labidurie.fr
+ * Copyright 2017 Fablab lannion http://fablab-lannion.org
  *
  */
 
 #include <Servo.h>
 
+// number of axes, ie: servos & joysticks
+// middle, left right, claw
+#define  NB_AXES 4
+
+typedef struct {
+	uint8_t axe_pin; /**< pin of the servo */
+	Servo servo; /**< servo object */
+	int16_t axe_val; /**< servo current angle */
+	uint8_t axe_min; /**< min angle */
+	uint8_t axe_max; /**< max angle */
+	uint8_t joy_pin; /**< pin of the joystick */
+	uint16_t joy_base; /**< values of joysticks when they are in resting positions. ie: no touch, init in setup function */
+} axe_t;
+
+axe_t axes[NB_AXES];
 
 // These constants won't change.  They're used to give names
 #define PIN_LED 13
 #define PIN_BTN 2
 #define PIN_MGT 12
 
-// number of axes, ie: servos
-#define  NB_AXES 2
-uint8_t  axes_pins[NB_AXES] = {9, 10};  /**< hw pins for each axe */
+uint8_t  axes_pins[NB_AXES] = {11, 10, 9, 6};  /**< hw pins for each axe */
 Servo    myservo[NB_AXES];              /**< array of servos object to control axes */
-int16_t  axes_vals[NB_AXES] = {90, 90}; /**< array of servos current angles */
+int16_t  axes_vals[NB_AXES] = {90, 90, 90, 180}; /**< array of servos current angles */
+uint8_t  axes_range[NB_AXES][2] = {{0, 180}, {50, 180}, {50, 160}, {0, 180}}; /**< array of servos min & max angles */
+#define MIN 0
+#define MAX 1
+
 // number of joysticks axes to control movements
-#define  NB_JOY 2
-uint8_t  joy_pins[NB_JOY] = {A0, A1};   /**< pins of analogic inputs from joysticks */
-uint16_t joy_bases[NB_JOY] = {0, 0};    /**< array for values of joysticks when they are in resting positions. ie: no touch, init in setup function */
+#define  NB_JOY 4
+uint8_t  joy_pins[NB_JOY] = {A0, A1, A2, A3};   /**< pins of analogic inputs from joysticks */
+uint16_t joy_bases[NB_JOY] = {0, 0, 0, 0};    /**< array for values of joysticks when they are in resting positions. ie: no touch, init in setup function */
 
 // value of dead zone around resting position
 #define HYSTERISIS 1
@@ -60,19 +76,21 @@ int16_t incServo (uint16_t joy, uint16_t base) {
 	absVal = base - joy ;
 	absVal = abs ( absVal );
 	// TODO: use non-linear function ?
-	ret = map (absVal, 0, 500, 0, 15);
+	ret = map (absVal, 0, 500, 0, 10);
 
 	return (joy < base)? ret : -ret ;
 } // incServo
 
-void dbgData (uint8_t servo, uint16_t val, int16_t angle, int inc) {
+void dbgData (uint8_t servo, uint16_t val, int16_t sangle, int rangle, int inc) {
   // print the results to the serial monitor:
   Serial.print("servo(");
   Serial.print(servo);
   Serial.print(") val=");
   Serial.print(val);
-  Serial.print(" ang=");
-  Serial.print(angle);
+  Serial.print(" sang=");
+  Serial.print(sangle);
+  Serial.print(" rang=");
+  Serial.print(rangle);
   Serial.print(" inc=");
   Serial.println(inc);
 }
@@ -82,14 +100,14 @@ void dbgData (uint8_t servo, uint16_t val, int16_t angle, int inc) {
  * @param inc increment to add/sub
  * @return the new angle to apply
  */
-uint8_t getAngle (uint8_t angle, int inc) {
+uint8_t getAngle (uint8_t angle, int inc, uint8_t axe) {
 	int ret = angle;
 	ret += inc;
-	if (ret < 0) {
-		ret = 0;
+	if (ret < axes_range[axe][MIN]) {
+		ret = axes_range[axe][MIN];
 	}
-	if (ret > 180) {
-		ret = 180;
+	if (ret > axes_range[axe][MAX]) {
+		ret = axes_range[axe][MAX];
 	}
 	return ret;
 }
@@ -97,10 +115,7 @@ uint8_t getAngle (uint8_t angle, int inc) {
 /** interupt routine for joystick switch
  */
 void ISR_setMagnet (void) {
-	if (digitalRead(PIN_BTN) == HIGH) {
-		magnet_state = ! magnet_state;
-// 		Serial.print(".");
-	}
+	magnet_state = ! magnet_state;
 }
 
 /** set magnet & led states
@@ -113,6 +128,7 @@ void setMagnet (void) {
 void setup (void) {
 	// setup hw
 	pinMode (PIN_LED, OUTPUT);
+	// Attaching servos
 	for (uint8_t a=0;a<NB_AXES;a++) {
 		myservo[a].attach(axes_pins[a]);
 	}
@@ -124,7 +140,7 @@ void setup (void) {
 
 
 	// initialize serial communications at 9600 bps:
-	Serial.begin(9600);
+	Serial.begin(115200);
 
 	// init of joy_bases[], servo should not be touched when arduino is starting
 	Serial.println("Calibrating servos...");
@@ -152,10 +168,10 @@ void loop (void) {
 		sensorValue = analogRead( joy_pins[j] );
 		// get servo movement
 		inc = incServo (sensorValue, joy_bases[j] );
-		axes_vals[j] = getAngle (axes_vals[j], inc);
+		axes_vals[j] = getAngle (axes_vals[j], inc, j);
 		// move
 		myservo[j].write(axes_vals[j]);
-		if (inc != 0) { dbgData (j, sensorValue, axes_vals[j], inc); }
+		if (inc != 0) { dbgData (j, sensorValue, axes_vals[j], myservo[j].read(), inc); }
 	}
 	setMagnet();
 //  	Serial.print(digitalRead(PIN_BTN));
