@@ -21,31 +21,19 @@
 
 #include <Servo.h>
 
-// number of axes, ie: servos & joysticks
-// middle, left right, claw
-#define  NB_AXES 4
-
-typedef struct {
-	uint8_t axe_pin; /**< pin of the servo */
-	Servo servo; /**< servo object */
-	int16_t axe_val; /**< servo current angle */
-	uint8_t axe_min; /**< min angle */
-	uint8_t axe_max; /**< max angle */
-	uint8_t joy_pin; /**< pin of the joystick */
-	uint16_t joy_base; /**< values of joysticks when they are in resting positions. ie: no touch, init in setup function */
-} axe_t;
-
-axe_t axes[NB_AXES];
-
 // These constants won't change.  They're used to give names
 #define PIN_LED 13
 #define PIN_BTN 2
 #define PIN_MGT 12
 
+// number of axes, ie: servos & joysticks
+// middle, left right, claw
+#define  NB_AXES 4
 uint8_t  axes_pins[NB_AXES] = {11, 10, 9, 6};  /**< hw pins for each axe */
 Servo    myservo[NB_AXES];              /**< array of servos object to control axes */
-int16_t  axes_vals[NB_AXES] = {90, 90, 90, 180}; /**< array of servos current angles */
-uint8_t  axes_range[NB_AXES][2] = {{0, 180}, {50, 180}, {50, 160}, {0, 180}}; /**< array of servos min & max angles */
+int16_t  axes_vals[NB_AXES] = {90, 100, 70, 180}; /**< array of servos current angles */
+uint8_t  axes_range[NB_AXES][2] = {{0, 180}, {50, 180}, {50, 160}, {0, 180}}; /**< array of servos min max angles */
+int8_t axes_inv[NB_AXES] = {-1, 1, 1, -1}; /**< is the axe inverted ? : 1, -1 */
 #define MIN 0
 #define MAX 1
 
@@ -59,6 +47,8 @@ uint16_t joy_bases[NB_JOY] = {0, 0, 0, 0};    /**< array for values of joysticks
 
 /** state of the magnet */
 volatile uint8_t magnet_state = LOW;
+
+uint16_t idle = 0; /**< idle loops (+= NB_AXES each loop() if nothing moved) */
 
 /** get sevo movement from joystick axis value
  * @param[in] joy joystick axis raw reading
@@ -76,7 +66,7 @@ int16_t incServo (uint16_t joy, uint16_t base) {
 	absVal = base - joy ;
 	absVal = abs ( absVal );
 	// TODO: use non-linear function ?
-	ret = map (absVal, 0, 500, 0, 10);
+	ret = map (absVal, 0, 500, 0, 5);
 
 	return (joy < base)? ret : -ret ;
 } // incServo
@@ -128,10 +118,6 @@ void setMagnet (void) {
 void setup (void) {
 	// setup hw
 	pinMode (PIN_LED, OUTPUT);
-	// Attaching servos
-	for (uint8_t a=0;a<NB_AXES;a++) {
-		myservo[a].attach(axes_pins[a]);
-	}
 	// button and magnet init
 	pinMode (PIN_BTN, INPUT_PULLUP);
 	pinMode (PIN_MGT, OUTPUT);
@@ -155,6 +141,13 @@ void setup (void) {
 		Serial.println (joy_bases[j]);
 	}
 	digitalWrite (PIN_LED, LOW);
+
+	// Attaching servos
+	for (uint8_t a=0;a<NB_AXES;a++) {
+		myservo[a].attach(axes_pins[a]);
+		myservo[a].write (axes_vals[a]);
+	}
+
 } // setup
 
 void loop (void) {
@@ -167,16 +160,32 @@ void loop (void) {
 		// read the analogin value from joystick
 		sensorValue = analogRead( joy_pins[j] );
 		// get servo movement
-		inc = incServo (sensorValue, joy_bases[j] );
+		inc = incServo (sensorValue, joy_bases[j] ) ;
+		inc = inc * axes_inv[j];
 		axes_vals[j] = getAngle (axes_vals[j], inc, j);
-		// move
-		myservo[j].write(axes_vals[j]);
-		if (inc != 0) { dbgData (j, sensorValue, axes_vals[j], myservo[j].read(), inc); }
+		// move ?
+		if (inc != 0) {
+			if ( ! myservo[j].attached() ) {
+				myservo[j].attach(axes_pins[j]);
+				idle = 0;
+			}
+			myservo[j].write(axes_vals[j]);
+			dbgData (j, sensorValue, axes_vals[j], myservo[j].read(), inc);
+		}
+		else {
+			idle++;
+		}
 	}
 	setMagnet();
 //  	Serial.print(digitalRead(PIN_BTN));
 // 	Serial.print(" ");
 // 	Serial.println(magnet_state);
 
-	delay(10);
+	delay(50);
+	if ( idle > NB_AXES * 200) {
+		for (uint8_t a=0; a <NB_AXES; a++) {
+			myservo[a].detach();
+		}
+	}
+
 } // loop
