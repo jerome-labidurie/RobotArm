@@ -165,9 +165,9 @@ void loop (void) {
 		axes_vals[j] = getAngle (axes_vals[j], inc, j);
 		// move ?
 		if (inc != 0) {
+			idle = 0;
 			if ( ! myservo[j].attached() ) {
 				myservo[j].attach(axes_pins[j]);
-				idle = 0;
 			}
 			myservo[j].write(axes_vals[j]);
 			dbgData (j, sensorValue, axes_vals[j], myservo[j].read(), inc);
