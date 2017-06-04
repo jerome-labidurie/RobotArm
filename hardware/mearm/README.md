@@ -1,6 +1,6 @@
-# mearm
+# MeArm
 
-##Mearm design files
+Mearm design files
 
 This work is based on MeArm robotic arm, designed
 by MeArm Limited and licensed under Creative
@@ -11,9 +11,8 @@ Please consider supporting that awesome project by purchasing kits from [their w
 This design has been modified from the original to:
   - Converted into SVG file format
   - Removed rasters to lower printing cost
-  - Organized into two files to be printable on P1-sized
-    acrylic sheets.
-  - Used the color coding required by Ponoko
   - Added an M3 wrench for convenience
 
-Please report any corrections by creating issues in this github project.
+Sources :
+* svg source files : https://github.com/jcard0na/mearm
+* Instruction manual : http://learn.mime.co.uk/assets/docs/building-the-mearm-deluxe/MeArm_v1.0_Manual_v1.4.pdf
