@@ -19,6 +19,13 @@
  *
  */
 
+/* TODO: some refactoring:
+ * use a struct ?
+ * functions should change data in place ?
+ * add joystick(s) switch
+ * BUG: not programmable in place
+ */
+
 #include <Servo.h>
 
 // These constants won't change.  They're used to give names
@@ -39,7 +46,8 @@ int8_t axes_inv[NB_AXES] = {-1, 1, 1, -1}; /**< is the axe inverted ? : 1, -1 */
 
 // number of joysticks axes to control movements
 #define  NB_JOY 4
-uint8_t  joy_pins[NB_JOY] = {A0, A1, A2, A3};   /**< pins of analogic inputs from joysticks */
+// J1Y, J1X, J2X, J2Y
+uint8_t  joy_pins[NB_JOY] = {A0, A2, A1, A3};   /**< pins of analogic inputs from joysticks, J1Y, J1X, J2X, J2Y */
 uint16_t joy_bases[NB_JOY] = {0, 0, 0, 0};    /**< array for values of joysticks when they are in resting positions. ie: no touch, init in setup function */
 
 // value of dead zone around resting position
@@ -71,6 +79,8 @@ int16_t incServo (uint16_t joy, uint16_t base) {
 	return (joy < base)? ret : -ret ;
 } // incServo
 
+/** dump some data to serial line
+ */
 void dbgData (uint8_t servo, uint16_t val, int16_t sangle, int rangle, int inc) {
   // print the results to the serial monitor:
   Serial.print("servo(");
@@ -87,7 +97,8 @@ void dbgData (uint8_t servo, uint16_t val, int16_t sangle, int rangle, int inc) 
 
 /** get new servo angle from increment
  * @param[in] angle the current angle of the servo
- * @param inc increment to add/sub
+ * @param[in] inc increment to add/sub
+ * @param[in] axe the concerned axe number
  * @return the new angle to apply
  */
 uint8_t getAngle (uint8_t angle, int inc, uint8_t axe) {
@@ -118,14 +129,15 @@ void setMagnet (void) {
 void setup (void) {
 	// setup hw
 	pinMode (PIN_LED, OUTPUT);
+
 	// button and magnet init
-	pinMode (PIN_BTN, INPUT_PULLUP);
-	pinMode (PIN_MGT, OUTPUT);
-	setMagnet();
-	attachInterrupt (digitalPinToInterrupt(PIN_BTN), ISR_setMagnet, RISING);
+// 	pinMode (PIN_BTN, INPUT_PULLUP);
+// 	pinMode (PIN_MGT, OUTPUT);
+// 	setMagnet();
+// 	attachInterrupt (digitalPinToInterrupt(PIN_BTN), ISR_setMagnet, RISING);
 
 
-	// initialize serial communications at 9600 bps:
+	// initialize serial communications at 115200
 	Serial.begin(115200);
 
 	// init of joy_bases[], servo should not be touched when arduino is starting
@@ -140,13 +152,13 @@ void setup (void) {
 		Serial.print ("Joy("); Serial.print(j); Serial.print ("):");
 		Serial.println (joy_bases[j]);
 	}
-	digitalWrite (PIN_LED, LOW);
 
 	// Attaching servos
 	for (uint8_t a=0;a<NB_AXES;a++) {
 		myservo[a].attach(axes_pins[a]);
 		myservo[a].write (axes_vals[a]);
 	}
+	digitalWrite (PIN_LED, LOW);
 
 } // setup
 
@@ -167,7 +179,9 @@ void loop (void) {
 		if (inc != 0) {
 			idle = 0;
 			if ( ! myservo[j].attached() ) {
+				// thi servo exit from sleep mode
 				myservo[j].attach(axes_pins[j]);
+				digitalWrite (PIN_LED, LOW);
 			}
 			myservo[j].write(axes_vals[j]);
 			dbgData (j, sensorValue, axes_vals[j], myservo[j].read(), inc);
@@ -176,13 +190,15 @@ void loop (void) {
 			idle++;
 		}
 	}
-	setMagnet();
+// 	setMagnet();
 //  	Serial.print(digitalRead(PIN_BTN));
 // 	Serial.print(" ");
 // 	Serial.println(magnet_state);
 
 	delay(50);
 	if ( idle > NB_AXES * 200) {
+		// going into sleep mode
+		digitalWrite (PIN_LED, HIGH);
 		for (uint8_t a=0; a <NB_AXES; a++) {
 			myservo[a].detach();
 		}
